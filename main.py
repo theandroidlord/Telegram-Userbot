@@ -1,89 +1,84 @@
 import os
-import logging
-import asyncio
-import shlex
 import re
+import shlex
+import asyncio
+import logging
+from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
-from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
-TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Regex to detect YouTube Shorts links
-YOUTUBE_SHORTS_REGEX = re.compile(r"(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/shorts\/|youtu\.be\/)([\w\-]+)")
+YOUTUBE_SHORTS_REGEX = re.compile(r"(https?://)?(www\.)?(youtube\.com/shorts/|youtu\.be/)([\w-]+)")
 
-async def download_video(url: str) -> str:
-    """Downloads a YouTube Shorts video using yt-dlp."""
+async def download_and_send_youtube_shorts(video_url: str, chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """Download YouTube Shorts using Piped and send to Telegram."""
+    match = YOUTUBE_SHORTS_REGEX.search(video_url)
+    if not match:
+        logging.error("Invalid YouTube Shorts URL.")
+        return
+
+    video_id = match.group(4)  # Extract video ID
+    piped_url = f"https://piped.video/{video_id}"
+    output_file = f"downloads/{video_id}.mp4"
+
     os.makedirs("downloads", exist_ok=True)
-    
-    output_template = "downloads/video.%(ext)s"
-    command = f'yt-dlp -o "{output_template}" {shlex.quote(url)}'
-    logger.info(f"Running: {command}")
 
-    process = await asyncio.create_subprocess_shell(
-        command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-    )
-    stdout, stderr = await process.communicate()
+    try:
+        # Download video from Piped using yt-dlp
+        process = await asyncio.create_subprocess_exec(
+            *shlex.split(f"yt-dlp -o '{output_file}' {piped_url}"),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
 
-    if process.returncode == 0:
-        # Find the actual downloaded file (since it could have any extension)
-        for file in os.listdir("downloads"):
-            if file.startswith("video.") and not file.endswith(".mp4"):
-                return os.path.join("downloads", file)
-    else:
-        logger.error(f"yt-dlp failed: {stderr.decode()}")
-    
-    return None
+        if process.returncode != 0:
+            logging.error(f"yt-dlp failed: {stderr.decode()}")
+            return
 
-async def convert_to_mp4(input_file: str) -> str:
-    """Converts the video to 1080p MP4 using ffmpeg."""
-    output_file = "downloads/converted.mp4"
-    command = f'ffmpeg -i "{input_file}" -vf "scale=-1:1080" -c:v libx264 -preset fast -c:a aac "{output_file}" -y'
-    
-    logger.info(f"Running: {command}")
-    process = await asyncio.create_subprocess_shell(
-        command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-    )
-    stdout, stderr = await process.communicate()
+        # Convert to MP4 if needed using FFmpeg
+        final_file = f"downloads/{video_id}_final.mp4"
+        convert_process = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-i", output_file, "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", final_file,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        await convert_process.communicate()
 
-    if process.returncode == 0:
-        return output_file
-    else:
-        logger.error(f"FFmpeg conversion failed: {stderr.decode()}")
-        return None
+        if os.path.exists(final_file):
+            await context.bot.send_video(chat_id, video=open(final_file, "rb"))
+            os.remove(final_file)
+        else:
+            await context.bot.send_video(chat_id, video=open(output_file, "rb"))
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Detects YouTube Shorts links and downloads the video."""
-    if update.message and update.message.text:
-        match = YOUTUBE_SHORTS_REGEX.search(update.message.text)
-        if match:
-            url = update.message.text.strip()
-            await update.message.reply_text("Downloading video...")
+        os.remove(output_file)  # Cleanup original file
+    except Exception as e:
+        logging.error(f"Download error: {e}")
 
-            downloaded_file = await download_video(url)
-            if downloaded_file:
-                converted_file = await convert_to_mp4(downloaded_file)
-                os.remove(downloaded_file)  # Remove the original downloaded file
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Detect Shorts links and process them."""
+    message_text = update.message.text
+    chat_id = update.message.chat_id
 
-                if converted_file:
-                    await update.message.reply_video(video=open(converted_file, "rb"))
-                    os.remove(converted_file)  # Remove converted file after sending
-                else:
-                    await update.message.reply_text("Conversion failed.")
-            else:
-                await update.message.reply_text("Download failed.")
+    if YOUTUBE_SHORTS_REGEX.search(message_text):
+        await update.message.reply_text("Downloading YouTube Shorts...")
+        await download_and_send_youtube_shorts(message_text, chat_id, context)
 
-def main() -> None:
-    """Start the bot."""
+def main():
+    """Start the bot using polling."""
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+
+    # Add a message handler to detect YouTube Shorts links
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
     application.run_polling()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
