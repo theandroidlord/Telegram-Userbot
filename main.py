@@ -18,38 +18,21 @@ if not SESSION_STRING:
 # Initialize Pyrogram Client
 app = Client("userbot", session_string=SESSION_STRING)
 
-# Register command handlers
-app.add_handler(filters.command("gld_img") & filters.me, gld_img_cmd)
-app.add_handler(filters.command("gld_vid") & filters.me, gld_vid_cmd)
-
 # Start command to check if bot is alive
 @app.on_message(filters.command("start") & filters.me)
 async def start_cmd(client, message):
     await message.reply_text("✅ Userbot is active!")
 
-# Web server for Render (Port Binding Fix)
-async def run_web():
-    async def handle(request):
-        return web.Response(text="Userbot is running!")
+# Register commands correctly
+@app.on_message(filters.command("gld_img") & filters.me)
+async def call_gld_img(client, message):
+    await gld_img_cmd(client, message)
 
-    app = web.Application()
-    app.router.add_get("/", handle)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", int(os.getenv("PORT", 10000)))
-    await site.start()
+@app.on_message(filters.command("gld_vid") & filters.me)
+async def call_gld_vid(client, message):
+    await gld_vid_cmd(client, message)
 
-# Run Pyrogram bot and web server separately
-async def main():
-    # Start Pyrogram bot
-    bot_task = asyncio.create_task(app.run())  
-
-    # Start web server for Render
-    web_task = asyncio.create_task(run_web())  
-
-    # Keep both running
-    await asyncio.gather(bot_task, web_task)
-
+# Run Pyrogram bot
 if __name__ == "__main__":
-    logging.info("🚀 Starting Userbot with Render port binding fix...")
-    asyncio.run(main())
+    logging.info("🚀 Starting Userbot...")
+    app.run()
