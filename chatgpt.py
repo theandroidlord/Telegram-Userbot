@@ -1,16 +1,14 @@
-import os
 import openai
+import os
 
-# Load OpenAI API key from environment variable
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# Load API key from environment variables
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Function to interact with ChatGPT
 def chat_with_gpt(prompt):
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",  # Use the latest GPT model
-            messages=[{"role": "user", "content": prompt}],
-            api_key=OPENAI_API_KEY
+            model="gpt-3.5-turbo",  # You can change this to gpt-4 if needed
+            messages=[{"role": "user", "content": prompt}]
         )
         return response["choices"][0]["message"]["content"]
     except Exception as e:
