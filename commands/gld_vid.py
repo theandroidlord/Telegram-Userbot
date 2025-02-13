@@ -1,58 +1,44 @@
 import os
+import shlex
 import asyncio
-import logging
-import subprocess
 from pyrogram import Client, filters
 
+async def download_video(url):
+    """Downloads only video files using gallery-dl."""
+    os.makedirs("downloads", exist_ok=True)
+    
+    process = await asyncio.create_subprocess_exec(
+        *shlex.split(f'gallery-dl -d downloads {url}'),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+    
+    stdout, stderr = await process.communicate()
+    
+    downloaded_files = os.listdir("downloads")
+    video_files = [file for file in downloaded_files if file.lower().endswith((".mp4", ".webm", ".mkv", ".mov"))]
+
+    return video_files
+
+@app.on_message(filters.command("gld_vid") & filters.me)
 async def gld_vid_cmd(client, message):
+    """Handles the /gld_vid command to download videos only."""
     if len(message.command) < 2:
-        await message.reply_text("❌ Please provide a valid URL.")
+        await message.reply_text("Usage: `/gld_vid <URL>`")
         return
 
     url = message.command[1]
-    download_path = "downloads"
-    os.makedirs(download_path, exist_ok=True)
+    await message.reply_text(f"Downloading videos from: {url}")
 
-    await message.reply_text("⏳ Downloading video...")
-
-    # Run gallery-dl command to download video
-    try:
-        command = ["gallery-dl", "-d", download_path, url]
-        process = await asyncio.create_subprocess_exec(*command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = await process.communicate()
-
-        if process.returncode != 0:
-            logging.error(f"Download error: {stderr.decode().strip()}")
-            await message.reply_text("❌ Failed to download video.")
-            return
-
-    except Exception as e:
-        logging.error(f"Error downloading video: {str(e)}")
-        await message.reply_text("❌ An error occurred while downloading.")
-        return
-
-    # Find the downloaded video file
-    video_files = [f for f in os.listdir(download_path) if f.endswith((".mp4", ".mkv", ".webm"))]
+    video_files = await download_video(url)
 
     if not video_files:
         await message.reply_text("❌ No video found after download.")
         return
 
-    video_path = os.path.join(download_path, video_files[0])
-
-    await message.reply_text("📤 Uploading video...")
-
-    try:
-        await client.send_video(
-            chat_id=message.chat.id,
-            video=video_path,
-            caption=""
-        )
-        await message.reply_text("✅ Video uploaded successfully!")
-
-        # Clean up file after upload
+    for video_file in video_files:
+        video_path = os.path.join("downloads", video_file)
+        await client.send_video(message.chat.id, video=video_path)
         os.remove(video_path)
 
-    except Exception as e:
-        logging.error(f"Error uploading video: {str(e)}")
-        await message.reply_text("❌ Failed to upload video.")
+    await message.reply_text("✅ All videos sent.")
