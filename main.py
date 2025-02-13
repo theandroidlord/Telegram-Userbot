@@ -1,40 +1,31 @@
 import os
 import asyncio
-import threading
 from flask import Flask
-from pyrogram import Client, filters
-from chatgpt import chat_with_gpt
+from pyrogram import Client
 
 # Load session string from environment variable
 SESSION_STRING = os.getenv("PYROGRAM_SESSION_STRING")
 
-# Initialize Pyrogram Client
-app = Client("userbot", session_string=SESSION_STRING)
+# Initialize Flask for Render port binding
+app = Flask(__name__)
 
-# Flask for port binding (Render requirement)
-flask_app = Flask(__name__)
-
-@flask_app.route("/")
+@app.route('/')
 def home():
     return "Userbot is running!"
 
-def run_flask():
-    port = int(os.getenv("PORT", 8080))
-    flask_app.run(host="0.0.0.0", port=port)
+# Pyrogram Client
+userbot = Client("userbot", session_string=SESSION_STRING)
 
-# Command: /gpt [message]
-@app.on_message(filters.command("gpt", prefixes=["/", "!"]) & filters.me)
-async def ask_gpt(client, message):
-    if len(message.command) > 1:
-        query = " ".join(message.command[1:])
-        response = chat_with_gpt(query)
-        await message.reply_text(response)
-    else:
-        await message.reply_text("Usage: /gpt [your question]")
+# Import commands from the `commands` folder
+from commands import start, gld_img, gld_vid
 
-# Run Flask in a separate thread
-threading.Thread(target=run_flask, daemon=True).start()
+# Run Pyrogram in async mode
+async def run():
+    await userbot.start()
+    print("Userbot is running...")
+    await asyncio.Future()  # Keeps running
 
-# Start the userbot
-print("Userbot is running...")
-app.run()
+if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
+    loop.create_task(run())
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
