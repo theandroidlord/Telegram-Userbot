@@ -1,41 +1,41 @@
 import os
 import asyncio
-from flask import Flask
 from pyrogram import Client, filters
+from flask import Flask
+import threading
 
-# Importing commands
-from commands.gld_img import gld_img_cmd
-from commands.gld_vid import gld_vid_cmd
-
-# Load session string from environment variable
+# Load session string from environment variables
 SESSION_STRING = os.getenv("PYROGRAM_SESSION_STRING")
 
-# Initialize Flask for Render port binding
-app = Flask(__name__)
+# Initialize Pyrogram Client
+app = Client("my_account", session_string=SESSION_STRING)
 
-@app.route('/')
+# Initialize Flask app for Render port binding
+flask_app = Flask(__name__)
+
+@flask_app.route("/")
 def home():
     return "Userbot is running!"
 
-# Pyrogram Client
-userbot = Client("userbot", session_string=SESSION_STRING)
+# Ensure commands are properly imported
+from commands.start import start_cmd
+from commands.gld_img import gld_img_cmd
+from commands.gld_vid import gld_vid_cmd
 
-# ✅ `/start` command to check if the userbot is active
-@userbot.on_message(filters.command("start", prefixes=["/", "!"]) & filters.me)
-async def start(client, message):
-    await message.reply_text("✅ Userbot is active and responding!")
+app.add_handler(filters.command("start")(start_cmd))
+app.add_handler(filters.command("gld_img")(gld_img_cmd))
+app.add_handler(filters.command("gld_vid")(gld_vid_cmd))
 
-# Registering commands from external files
-userbot.add_handler(gld_img_cmd)
-userbot.add_handler(gld_vid_cmd)
+def run_flask():
+    flask_app.run(host="0.0.0.0", port=10000)  # Render requires port binding
 
-# Run Pyrogram in async mode
-async def run():
-    await userbot.start()
-    print("Userbot is running...")
-    await asyncio.Future()  # Keeps running
+async def run_pyrogram():
+    print("Starting Pyrogram client...")
+    await app.start()
+    print("Pyrogram client is running...")
+    await asyncio.Event().wait()  # Keeps Pyrogram running
 
+# Start both Flask and Pyrogram together
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.create_task(run())
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
+    threading.Thread(target=run_flask).start()
+    asyncio.run(run_pyrogram())
