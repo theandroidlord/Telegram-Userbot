@@ -1,84 +1,77 @@
 import os
-import logging
-import asyncio
+import re
 import shlex
-from dotenv import load_dotenv
-from flask import Flask
+import asyncio
+import logging
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, MessageHandler, filters, ContextTypes
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
-TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-# Set up logging
+# Enable logging
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Flask app for Render port binding
-app = Flask(__name__)
+# Regex pattern for detecting YouTube Shorts links
+YT_SHORTS_PATTERN = re.compile(r"(https?://)?(www\.)?(youtube\.com/shorts/|youtu\.be/)")
 
-@app.route('/')
-def home():
-    return "Bot is running!"
+async def download_and_convert(video_url: str) -> str:
+    """Downloads video using yt-dlp and converts to MP4 using ffmpeg."""
+    os.makedirs("downloads", exist_ok=True)
+    temp_file = "downloads/temp_video"
+    output_file = "downloads/output.mp4"
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Responds to /start command."""
-    await update.message.reply_text("Send a YouTube Shorts link, and I'll download it in 720p!")
+    # Step 1: Download video naturally
+    download_cmd = f'yt-dlp -o "{temp_file}" {video_url}'
+    process = await asyncio.create_subprocess_shell(download_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    await process.communicate()
 
-async def download_youtube_shorts(url):
-    """Downloads a YouTube Shorts video in 720p using yt-dlp."""
-    output_dir = "downloads"
-    os.makedirs(output_dir, exist_ok=True)
-
-    command = f'yt-dlp -f "best[height=720]" -o "{output_dir}/%(title)s.%(ext)s" {shlex.quote(url)}'
-    
-    process = await asyncio.create_subprocess_shell(
-        command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-    )
-    
-    stdout, stderr = await process.communicate()
-    
     if process.returncode != 0:
-        logging.error(f"yt-dlp error: {stderr.decode().strip()}")
+        logger.error("yt-dlp download failed.")
         return None
 
-    # Find the downloaded file
-    files = os.listdir(output_dir)
-    if not files:
+    # Step 2: Convert to MP4 using ffmpeg
+    convert_cmd = f'ffmpeg -y -i "{temp_file}" -c:v libx264 -preset fast -c:a aac "{output_file}"'
+    process = await asyncio.create_subprocess_shell(convert_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    await process.communicate()
+
+    if process.returncode != 0:
+        logger.error("FFmpeg conversion failed.")
         return None
 
-    return os.path.join(output_dir, files[0])
+    return output_file
 
-async def handle_youtube_shorts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Detects YouTube Shorts links and downloads the video in 720p."""
-    url = update.message.text.strip()
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Detects YouTube Shorts links and processes them."""
+    message = update.message.text
+    if not message:
+        return
 
-    if "youtube.com/shorts/" not in url and "youtu.be/" not in url:
-        return  # Ignore non-Shorts links
+    match = YT_SHORTS_PATTERN.search(message)
+    if match:
+        video_url = match.group(0)
+        chat_id = update.message.chat_id
 
-    await update.message.reply_text("Downloading Shorts video in 720p...")
+        await update.message.reply_text(f"Downloading: {video_url}")
+        video_path = await download_and_convert(video_url)
 
-    video_path = await download_youtube_shorts(url)
+        if video_path:
+            await context.bot.send_video(chat_id, video=open(video_path, "rb"))
+            os.remove(video_path)
+        else:
+            await update.message.reply_text("Download failed.")
 
-    if video_path and os.path.exists(video_path):
-        await update.message.reply_video(video=open(video_path, "rb"))
-        os.remove(video_path)  # Clean up after sending
-    else:
-        await update.message.reply_text("Download failed.")
-
-def main() -> None:
-    """Start the bot using polling."""
+def main():
+    """Starts the Telegram bot with polling."""
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    
+    # Handle messages with YouTube Shorts links
+    application.add_handler(MessageHandler(filters.TEXT & filters.Entity("url"), handle_message))
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & filters.Entity("url"), handle_youtube_shorts))
+    application.run_polling()
 
-    # Run bot in an asyncio event loop
-    loop = asyncio.get_event_loop()
-    loop.create_task(application.run_polling())
-
-    # Start Flask app on port 8080
-    app.run(host="0.0.0.0", port=8080)
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
