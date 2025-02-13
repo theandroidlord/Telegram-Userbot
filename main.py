@@ -1,76 +1,84 @@
 import os
 import logging
-import yt_dlp
-import re
 import asyncio
-from flask import Flask
-from threading import Thread
+import yt_dlp
+import aiohttp
+import shlex
 from dotenv import load_dotenv
+from flask import Flask
 from telegram import Update
-from telegram.ext import Application, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # Load environment variables
 load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+ALLOWED_CHAT_IDS = os.getenv('ALLOWED_CHAT_IDS', "").split(',')
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 
-# Initialize Flask app for Render port binding fix
+# Flask app for Render port binding fix
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Bot is running."
+    return "Bot is running!"
 
-def run_flask():
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Responds to /start command."""
+    await update.message.reply_text("Send a YouTube Shorts link, and I'll download it!")
 
-# YouTube Shorts URL pattern
-YOUTUBE_SHORTS_REGEX = r"(https?:\/\/(?:www\.)?youtube\.com\/shorts\/[a-zA-Z0-9_-]+)"
-
-async def download_youtube_shorts(url):
+async def download_youtube_video(url):
     """Downloads a YouTube Shorts video using yt-dlp."""
-    os.makedirs("downloads", exist_ok=True)
+    output_dir = "downloads"
+    os.makedirs(output_dir, exist_ok=True)
+
     ydl_opts = {
-        'outtmpl': 'downloads/%(title)s.%(ext)s',
-        'format': 'bestvideo+bestaudio/best',
-        'merge_output_format': 'mp4'
+        "format": "b[ext=mp4]",
+        "outtmpl": f"{output_dir}/%(title)s.%(ext)s",
+        "quiet": True,
+        "no_warnings": True
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info_dict = ydl.extract_info(url, download=True)
-        file_path = ydl.prepare_filename(info_dict)
-        return file_path.replace('.webm', '.mp4')  # Ensure mp4 extension
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Checks for YouTube Shorts links and downloads them."""
-    message = update.message.text
-    chat_id = update.message.chat_id
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info)
+            return filename
+    except Exception as e:
+        logging.error(f"yt-dlp error: {e}")
+        return None
 
-    shorts_links = re.findall(YOUTUBE_SHORTS_REGEX, message)
+async def handle_youtube_shorts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Detects YouTube Shorts links and downloads the video."""
+    url = update.message.text.strip()
 
-    if shorts_links:
-        for url in shorts_links:
-            await update.message.reply_text(f"Downloading: {url}")
-            try:
-                file_path = await asyncio.to_thread(download_youtube_shorts, url)
-                with open(file_path, 'rb') as video_file:
-                    await context.bot.send_video(chat_id, video=video_file)
-                os.remove(file_path)
-            except Exception as e:
-                logging.error(f"Download error: {e}")
-                await update.message.reply_text("Failed to download.")
+    if "youtube.com/shorts/" not in url and "youtu.be/" not in url:
+        return  # Ignore non-Shorts links
 
-def main():
-    """Starts the bot."""
+    await update.message.reply_text("Downloading Shorts video...")
+
+    video_path = await download_youtube_video(url)
+
+    if video_path and os.path.exists(video_path):
+        await update.message.reply_video(video=open(video_path, "rb"))
+        os.remove(video_path)  # Clean up after sending
+    else:
+        await update.message.reply_text("Download failed.")
+
+def main() -> None:
+    """Start the bot using polling."""
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, handle_message))
 
-    # Start Flask server in a separate thread
-    flask_thread = Thread(target=run_flask, daemon=True)
-    flask_thread.start()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.TEXT & filters.Entity("url"), handle_youtube_shorts))
 
-    application.run_polling()
+    # Run bot in an asyncio event loop
+    loop = asyncio.get_event_loop()
+    loop.create_task(application.run_polling())
+
+    # Start Flask app on port 8080
+    app.run(host="0.0.0.0", port=8080)
 
 if __name__ == '__main__':
     main()
