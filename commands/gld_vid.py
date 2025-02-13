@@ -20,7 +20,6 @@ async def download_video(url):
 
     return video_files
 
-@app.on_message(filters.command("gld_vid") & filters.me)
 async def gld_vid_cmd(client, message):
     """Handles the /gld_vid command to download videos only."""
     if len(message.command) < 2:

@@ -20,7 +20,6 @@ async def download_images(url):
 
     return image_files
 
-@app.on_message(filters.command("gld_img") & filters.me)
 async def gld_img_cmd(client, message):
     """Handles the /gld_img command to download images only."""
     if len(message.command) < 2:
