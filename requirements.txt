@@ -1,5 +1,6 @@
 pyrogram
 tgcrypto
+firebase-admin
 google-cloud-firestore
 google-auth
 google-auth-oauthlib
