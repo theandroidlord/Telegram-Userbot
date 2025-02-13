@@ -1,10 +1,4 @@
 pyrogram
 tgcrypto
-firebase-admin
-google-cloud-firestore
-google-auth
-google-auth-oauthlib
-google-auth-httplib2
-aiohttp
-requests
+openai
 flask
