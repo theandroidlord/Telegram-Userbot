@@ -18,47 +18,27 @@ logging.basicConfig(level=logging.INFO)
 YOUTUBE_SHORTS_REGEX = re.compile(r"(https?://)?(www\.)?(youtube\.com/shorts/|youtu\.be/)([\w-]+)")
 
 async def download_and_send_youtube_shorts(video_url: str, chat_id: int, context: ContextTypes.DEFAULT_TYPE):
-    """Download YouTube Shorts using Piped and send to Telegram."""
-    match = YOUTUBE_SHORTS_REGEX.search(video_url)
-    if not match:
-        logging.error("Invalid YouTube Shorts URL.")
-        return
-
-    video_id = match.group(4)  # Extract video ID
-    piped_url = f"https://piped.video/{video_id}"
-    output_file = f"downloads/{video_id}.mp4"
-
+    """Download YouTube Shorts using rin-gil's downloader and send to Telegram."""
     os.makedirs("downloads", exist_ok=True)
+    output_file = "downloads/video.mp4"
 
     try:
-        # Download video from Piped using yt-dlp
+        # Run the YouTube Shorts Downloader script
         process = await asyncio.create_subprocess_exec(
-            *shlex.split(f"yt-dlp -o '{output_file}' {piped_url}"),
+            *shlex.split(f"python3 -m shorts_dl -o {output_file} {video_url}"),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await process.communicate()
 
         if process.returncode != 0:
-            logging.error(f"yt-dlp failed: {stderr.decode()}")
+            logging.error(f"Download failed: {stderr.decode()}")
             return
 
-        # Convert to MP4 if needed using FFmpeg
-        final_file = f"downloads/{video_id}_final.mp4"
-        convert_process = await asyncio.create_subprocess_exec(
-            "ffmpeg", "-i", output_file, "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", final_file,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        await convert_process.communicate()
-
-        if os.path.exists(final_file):
-            await context.bot.send_video(chat_id, video=open(final_file, "rb"))
-            os.remove(final_file)
-        else:
+        if os.path.exists(output_file):
             await context.bot.send_video(chat_id, video=open(output_file, "rb"))
+            os.remove(output_file)  # Cleanup downloaded file
 
-        os.remove(output_file)  # Cleanup original file
     except Exception as e:
         logging.error(f"Download error: {e}")
 
