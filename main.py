@@ -1,8 +1,6 @@
 import os
 import logging
 import asyncio
-import yt_dlp
-import aiohttp
 import shlex
 from dotenv import load_dotenv
 from flask import Flask
@@ -12,12 +10,11 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 # Load environment variables
 load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-ALLOWED_CHAT_IDS = os.getenv('ALLOWED_CHAT_IDS', "").split(',')
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 
-# Flask app for Render port binding fix
+# Flask app for Render port binding
 app = Flask(__name__)
 
 @app.route('/')
@@ -26,39 +23,42 @@ def home():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Responds to /start command."""
-    await update.message.reply_text("Send a YouTube Shorts link, and I'll download it!")
+    await update.message.reply_text("Send a YouTube Shorts link, and I'll download it in 720p!")
 
-async def download_youtube_video(url):
-    """Downloads a YouTube Shorts video using yt-dlp."""
+async def download_youtube_shorts(url):
+    """Downloads a YouTube Shorts video in 720p using yt-dlp."""
     output_dir = "downloads"
     os.makedirs(output_dir, exist_ok=True)
 
-    ydl_opts = {
-        "format": "b[ext=mp4]",
-        "outtmpl": f"{output_dir}/%(title)s.%(ext)s",
-        "quiet": True,
-        "no_warnings": True
-    }
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
-            return filename
-    except Exception as e:
-        logging.error(f"yt-dlp error: {e}")
+    command = f'yt-dlp -f "best[height=720]" -o "{output_dir}/%(title)s.%(ext)s" {shlex.quote(url)}'
+    
+    process = await asyncio.create_subprocess_shell(
+        command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
+    
+    stdout, stderr = await process.communicate()
+    
+    if process.returncode != 0:
+        logging.error(f"yt-dlp error: {stderr.decode().strip()}")
         return None
 
+    # Find the downloaded file
+    files = os.listdir(output_dir)
+    if not files:
+        return None
+
+    return os.path.join(output_dir, files[0])
+
 async def handle_youtube_shorts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Detects YouTube Shorts links and downloads the video."""
+    """Detects YouTube Shorts links and downloads the video in 720p."""
     url = update.message.text.strip()
 
     if "youtube.com/shorts/" not in url and "youtu.be/" not in url:
         return  # Ignore non-Shorts links
 
-    await update.message.reply_text("Downloading Shorts video...")
+    await update.message.reply_text("Downloading Shorts video in 720p...")
 
-    video_path = await download_youtube_video(url)
+    video_path = await download_youtube_shorts(url)
 
     if video_path and os.path.exists(video_path):
         await update.message.reply_video(video=open(video_path, "rb"))
