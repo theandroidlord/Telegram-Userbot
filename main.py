@@ -1,87 +1,95 @@
 import os
-import logging
 import asyncio
+import logging
 import firebase_admin
 from firebase_admin import credentials, firestore
 from pyrogram import Client, filters
+from flask import Flask
+import threading
 
-# Initialize logging
+# Enable logging
 logging.basicConfig(level=logging.INFO)
 
-# Load Firebase credentials
-cred = credentials.Certificate("firebase.json")
-if not firebase_admin._apps:  # Ensure Firebase is initialized only once
+# Load session string from environment variables
+SESSION_STRING = os.getenv("TG_SESSION")
+if not SESSION_STRING:
+    raise ValueError("TG_SESSION environment variable is not set")
+
+# Firebase setup
+FIREBASE_CRED_PATH = "firebase.json"  # Ensure this file is in your root directory
+if not firebase_admin._apps:
+    cred = credentials.Certificate(FIREBASE_CRED_PATH)
     firebase_admin.initialize_app(cred)
 
-# Firestore database instance
 db = firestore.client()
 
-# Environment variables
-API_ID = os.getenv("API_ID")
-API_HASH = os.getenv("API_HASH")
-SESSION_STRING = os.getenv("SESSION_STRING")
+# Pyrogram Client
+app = Client("userbot", session_string=SESSION_STRING)
 
-# Create a Pyrogram Client (Userbot)
-app = Client("my_account", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
+# Flask app for Render port binding
+server = Flask(__name__)
 
+@server.route('/')
+def home():
+    return "Userbot is running!"
 
-@app.on_message(filters.command("hi"))
+def run_flask():
+    server.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
+# Start Flask in a separate thread
+threading.Thread(target=run_flask, daemon=True).start()
+
+# Command: /hi (name)
+@app.on_message(filters.me & filters.command("hi", prefixes="/"))
 async def hi_command(client, message):
-    name = " ".join(message.command[1:]) or "there"
-    await message.reply_text(f"Hello {name}, How are you?")
+    args = message.text.split(maxsplit=1)
+    if len(args) > 1:
+        name = args[1]
+        await message.reply_text(f"Hello {name}, How are you?")
+    else:
+        await message.reply_text("Hello! How are you?")
 
-
-@app.on_message(filters.command("store") & filters.reply)
-async def store_command(client, message):
+# Command: /store (text) (description) (author) (when replying to a message)
+@app.on_message(filters.me & filters.command("store", prefixes="/") & filters.reply)
+async def store_message(client, message):
     args = message.text.split(maxsplit=3)
     if len(args) < 4:
-        await message.reply_text("Usage: /store <Title> <Description> <Author> (Reply to a message)")
+        await message.reply_text("Usage: /store (Text) (Description) (Author) (Reply to a message)")
         return
-    
-    title, description, author = args[1], args[2], args[3]
-    message_link = f"https://t.me/c/{message.chat.id}/{message.reply_to_message.message_id}"
 
-    doc_ref = db.collection("stored_messages").document()
+    title, description, author = args[1], args[2], args[3]
+    replied_msg = message.reply_to_message
+    if not replied_msg or not replied_msg.link:
+        await message.reply_text("Failed to get message link.")
+        return
+
     data = {
-        "text": title,
+        "title": title,
         "description": description,
         "author": author,
-        "message_link": message_link
+        "link": replied_msg.link
     }
-    await asyncio.to_thread(doc_ref.set, data)  # Prevents blocking the event loop
+    
+    db.collection("stored_messages").add(data)
+    await message.reply_text(f"Stored message link with title: {title}")
 
-    await message.reply_text(f"Stored successfully: {title} - {description}")
-
-
-@app.on_message(filters.command("restore"))
-async def restore_command(client, message):
+# Command: /restore (author)
+@app.on_message(filters.me & filters.command("restore", prefixes="/"))
+async def restore_messages(client, message):
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
-        await message.reply_text("Usage: /restore <Author>")
+        await message.reply_text("Usage: /restore (Author)")
         return
-    
+
     author = args[1]
-    query = db.collection("stored_messages").where("author", "==", author).stream()
-    results = await asyncio.to_thread(list, query)  # Fetch documents in a separate thread
+    docs = db.collection("stored_messages").where("author", "==", author).stream()
+    results = [f"📌 [{doc.to_dict()['title']}]({doc.to_dict()['link']}) - {doc.to_dict()['description']}" for doc in docs]
 
-    if not results:
+    if results:
+        await message.reply_text("\n".join(results), disable_web_page_preview=True)
+    else:
         await message.reply_text(f"No stored messages found for {author}.")
-        return
 
-    response = "\n".join(
-        [f"{doc.to_dict()['text']}: {doc.to_dict()['message_link']}" for doc in results]
-    )
-
-    await message.reply_text(response)
-
-
-# Port binding fix for Render
-PORT = int(os.environ.get("PORT", 8080))
-
-async def start():
-    logging.info("Starting Telegram userbot...")
-    await app.start()
-    await asyncio.sleep(1e6)  # Keep it running
-
-if __name__ == "__main__":
-    asyncio.run(start())
+# Start bot
+print("Userbot is running...")
+app.run()
