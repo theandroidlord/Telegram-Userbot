@@ -20,7 +20,7 @@ def home():
 # Import commands (Using Import Method)
 from commands.gld_img import gld_img_cmd
 from commands.gld_vid import gld_vid_cmd
-from commands.start import start_cmd  # Import start command
+# Import start command
 
 # Function to run Flask for Render
 def run_flask():
