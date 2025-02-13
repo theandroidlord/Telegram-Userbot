@@ -1,39 +1,38 @@
 import os
-import asyncio
-import threading
+import logging
 from pyrogram import Client, filters
-from flask import Flask
-
-# Load session string from environment variables
-SESSION_STRING = os.getenv("PYROGRAM_SESSION_STRING")
-
-# Initialize Pyrogram Client
-app = Client("my_account", session_string=SESSION_STRING)
-
-# Initialize Flask for Render port binding
-flask_app = Flask(__name__)
-
-@flask_app.route("/")
-def home():
-    return "Userbot is running!"
-
-# Import commands (Using Import Method)
 from commands.gld_img import gld_img_cmd
 from commands.gld_vid import gld_vid_cmd
-# Import start command
 
-# Function to run Flask for Render
-def run_flask():
-    flask_app.run(host="0.0.0.0", port=10000)
+# Enable debug logging
+logging.basicConfig(level=logging.DEBUG)
 
-# Function to run Pyrogram
-async def run_pyrogram():
-    print("Starting Pyrogram client...")
-    await app.start()
-    print("Pyrogram client is running...")
-    await asyncio.Event().wait()
+# Load session string from environment variable
+SESSION_STRING = os.getenv("PYROGRAM_SESSION_STRING")
 
-# Start both Flask and Pyrogram
-if __name__ == "__main__":
-    threading.Thread(target=run_flask).start()
-    asyncio.run(run_pyrogram())
+# Initialize Pyrogram client
+app = Client("my_account", session_string=SESSION_STRING)
+
+# Start command
+@app.on_message(filters.command("start") & filters.me)
+async def start_cmd(client, message):
+    await message.reply_text("Userbot is Active!")
+
+# /gld_img command
+@app.on_message(filters.command("gld_img") & filters.me)
+async def gld_img_handler(client, message):
+    await gld_img_cmd(client, message)
+
+# /gld_vid command
+@app.on_message(filters.command("gld_vid") & filters.me)
+async def gld_vid_handler(client, message):
+    await gld_vid_cmd(client, message)
+
+# Debugging: Check if userbot is receiving messages
+@app.on_message(filters.text & filters.me)
+async def debug_message(client, message):
+    logging.debug(f"Received message: {message.text}")
+
+# Start the bot
+print("Userbot is running...")
+app.run()
