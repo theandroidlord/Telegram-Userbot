@@ -3,52 +3,48 @@ import shlex
 import os
 from pyrogram import Client
 
+DOWNLOAD_DIR = "downloads"
+
 async def gld_vid_cmd(client: Client, message):
     if len(message.command) < 2:
         await message.reply_text("❌ Please provide a URL.")
         return
 
     url = message.command[1]
-    await message.reply_text(f"🔄 Fetching videos from {url}...")
+    await message.reply_text(f"🔄 Downloading videos from {url}...")
 
-    # Get media download links
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+    # Run gallery-dl to download directly
     process = await asyncio.create_subprocess_exec(
-        *shlex.split(f'gallery-dl --get-urls {url}'),
+        *shlex.split(f'gallery-dl -d {DOWNLOAD_DIR} {url}'),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE
     )
-    stdout, _ = await process.communicate()
-    media_urls = stdout.decode().splitlines()
+    stdout, stderr = await process.communicate()
 
-    # Filter only video files
-    video_urls = [link for link in media_urls if link.lower().endswith((".mp4", ".mkv", ".webm"))]
+    logging_output = stdout.decode() + stderr.decode()
+    print(logging_output)  # Debugging
 
-    if not video_urls:
-        await message.reply_text("❌ No videos found.")
+    # Check for downloaded videos
+    video_files = [f for f in os.listdir(DOWNLOAD_DIR) if f.endswith((".mp4", ".mkv", ".webm"))]
+
+    if not video_files:
+        await message.reply_text("❌ No video found after download.")
         return
 
-    await message.reply_text(f"✅ Found {len(video_urls)} videos. Downloading...")
+    await message.reply_text(f"✅ Found {len(video_files)} videos. Sending...")
 
-    for vid_url in video_urls:
-        vid_process = await asyncio.create_subprocess_exec(
-            *shlex.split(f'gallery-dl {vid_url}'),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        await vid_process.communicate()
+    for vid_file in video_files:
+        vid_path = os.path.join(DOWNLOAD_DIR, vid_file)
 
-        downloaded_files = [f for f in os.listdir() if f.endswith((".mp4", ".mkv", ".webm"))]
-        if not downloaded_files:
-            await message.reply_text("❌ No video found after download.")
-            continue
-
-        for vid_file in downloaded_files:
-            try:
-                await message.reply_video(vid_file)
-            except Exception as e:
-                await message.reply_text(f"⚠️ Failed to send {vid_file}: {e}")
-            os.remove(vid_file)
-            await asyncio.sleep(5)
+        try:
+            await message.reply_video(vid_path)
+        except Exception as e:
+            await message.reply_text(f"⚠️ Failed to send {vid_file}: {e}")
+        
+        os.remove(vid_path)  # Delete after sending
+        await asyncio.sleep(5)  # Avoid rate limit
 
     await message.reply_text("✅ All videos sent.")
 
