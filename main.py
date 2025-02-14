@@ -2,23 +2,20 @@ import os
 import logging
 import asyncio
 from pyrogram import Client, filters
-from aiohttp import web
 
-# Import command handlers
+# Import command handlers properly
 from commands.gld_img import gld_img_cmd
 from commands.gld_vid import gld_vid_cmd
 
 # Load session string from environment
 SESSION_STRING = os.getenv("STRING_SESSION")
 
-# Ensure session string exists
 if not SESSION_STRING:
     raise ValueError("STRING_SESSION environment variable is missing.")
 
 # Initialize Pyrogram Client
 app = Client("userbot", session_string=SESSION_STRING)
 
-# Start command to check if bot is alive
 @app.on_message(filters.command("start") & filters.me)
 async def start_cmd(client, message):
     await message.reply_text("✅ Userbot is active!")

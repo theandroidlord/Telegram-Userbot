@@ -1,15 +1,15 @@
 import asyncio
 import shlex
 import os
-from pyrogram import Client, filters
+from pyrogram import Client
 
-async def gld_vid_cmd(client: Client, message):
+async def gld_img_cmd(client: Client, message):
     if len(message.command) < 2:
         await message.reply_text("❌ Please provide a URL.")
         return
 
     url = message.command[1]
-    await message.reply_text(f"🔄 Fetching videos from {url}...")
+    await message.reply_text(f"🔄 Fetching images from {url}...")
 
     # Get media download links
     process = await asyncio.create_subprocess_exec(
@@ -20,37 +20,40 @@ async def gld_vid_cmd(client: Client, message):
     stdout, _ = await process.communicate()
     media_urls = stdout.decode().splitlines()
 
-    # Filter only videos
-    video_urls = [link for link in media_urls if link.lower().endswith((".mp4", ".mkv", ".webm"))]
+    # Filter only image files
+    image_urls = [link for link in media_urls if link.lower().endswith((".jpg", ".png", ".jpeg", ".gif", ".webp"))]
 
-    if not video_urls:
-        await message.reply_text("❌ No videos found.")
+    if not image_urls:
+        await message.reply_text("❌ No images found.")
         return
 
-    await message.reply_text(f"✅ Found {len(video_urls)} videos. Downloading...")
+    await message.reply_text(f"✅ Found {len(image_urls)} images. Downloading...")
 
-    # Process each video one by one
-    for vid_url in video_urls:
-        vid_process = await asyncio.create_subprocess_exec(
-            *shlex.split(f'gallery-dl {vid_url}'),
+    # Process each image one by one
+    for img_url in image_urls:
+        img_process = await asyncio.create_subprocess_exec(
+            *shlex.split(f'gallery-dl {img_url}'),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        await vid_process.communicate()
+        await img_process.communicate()
 
-        # Find downloaded file
-        downloaded_files = [f for f in os.listdir() if f.endswith((".mp4", ".mkv", ".webm"))]
+        # Find downloaded files
+        downloaded_files = [f for f in os.listdir() if f.endswith((".jpg", ".png", ".jpeg", ".gif", ".webp"))]
         if not downloaded_files:
-            await message.reply_text("❌ No video found after download.")
+            await message.reply_text("❌ No image found after download.")
             continue
 
-        # Send each video and delete it
-        for vid_file in downloaded_files:
+        # Send each image and delete it
+        for img_file in downloaded_files:
             try:
-                await message.reply_video(vid_file)
+                await message.reply_document(img_file)  # Send as document
             except Exception as e:
-                await message.reply_text(f"⚠️ Failed to send {vid_file}: {e}")
-            os.remove(vid_file)  # Delete after sending
-            await asyncio.sleep(5)  # 5-second delay between files
+                await message.reply_text(f"⚠️ Failed to send {img_file}: {e}")
+            os.remove(img_file)
+            await asyncio.sleep(5)  # 5-second delay
 
-    await message.reply_text("✅ All videos sent.")
+    await message.reply_text("✅ All images sent.")
+
+# ✅ Ensure function is correctly imported
+__all__ = ["gld_img_cmd"]
