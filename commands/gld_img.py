@@ -1,53 +1,71 @@
+import os
+import logging
 import asyncio
 import shlex
-import os
-from pyrogram import Client
+from telegram import Update
+from telegram.ext import ContextTypes
+from telegram.error import RetryAfter
 
-async def gld_img_cmd(client: Client, message):
-    if len(message.command) < 2:
-        await message.reply_text("❌ Please provide a URL.")
+DOWNLOAD_DIR = "downloads"
+
+async def fetch_and_send_image(chat_id, file_path, context):
+    """Sends a downloaded image to Telegram."""
+    try:
+        await asyncio.sleep(5)  # Delay to avoid flood limits
+        with open(file_path, 'rb') as img_file:
+            try:
+                await context.bot.send_photo(chat_id, photo=img_file)
+            except RetryAfter as e:
+                logging.warning(f"Flood control exceeded. Retrying in {e.retry_after} seconds...")
+                await asyncio.sleep(e.retry_after)
+                await context.bot.send_photo(chat_id, photo=img_file)
+    except Exception as e:
+        logging.error(f"Error sending image: {e}")
+    finally:
+        os.remove(file_path)
+
+
+async def gld_img(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Downloads and sends images using gallery-dl."""
+    chat_id = str(update.message.chat_id)
+
+    if not context.args:
+        await update.message.reply_text("❌ Please provide a valid URL.")
         return
 
-    url = message.command[1]
-    await message.reply_text(f"🔄 Fetching images from {url}...")
+    url = ' '.join(context.args)
+    await update.message.reply_text(f"🔄 Fetching images from {url}...")
 
-    process = await asyncio.create_subprocess_exec(
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+    # Extract only image URLs
+    media_process = await asyncio.create_subprocess_exec(
         *shlex.split(f'gallery-dl --get-urls {url}'),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE
     )
-    stdout, _ = await process.communicate()
-    media_urls = stdout.decode().splitlines()
-
-    image_urls = [link for link in media_urls if link.lower().endswith((".jpg", ".png", ".jpeg", ".gif", ".webp"))]
+    media_stdout, _ = await media_process.communicate()
+    media_urls = [line.strip() for line in media_stdout.decode().splitlines() if line.strip()]
+    image_urls = [url for url in media_urls if url.lower().endswith((".jpg", ".jpeg", ".png", ".gif", ".webp"))]
 
     if not image_urls:
-        await message.reply_text("❌ No images found.")
+        await update.message.reply_text("❌ No images found.")
         return
 
-    await message.reply_text(f"✅ Found {len(image_urls)} images. Downloading...")
+    await update.message.reply_text(f"✅ Found {len(image_urls)} images. Downloading...")
 
-    for img_url in image_urls:
-        img_process = await asyncio.create_subprocess_exec(
-            *shlex.split(f'gallery-dl {img_url}'),
+    for image_url in image_urls:
+        process = await asyncio.create_subprocess_exec(
+            *shlex.split(f'gallery-dl -d {DOWNLOAD_DIR} {image_url}'),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        await img_process.communicate()
+        await process.communicate()
 
-        downloaded_files = [f for f in os.listdir() if f.endswith((".jpg", ".png", ".jpeg", ".gif", ".webp"))]
-        if not downloaded_files:
-            await message.reply_text("❌ No image found after download.")
-            continue
+        downloaded_files = os.listdir(DOWNLOAD_DIR)
+        image_files = [os.path.join(DOWNLOAD_DIR, f) for f in downloaded_files if f.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp"))]
 
-        for img_file in downloaded_files:
-            try:
-                await message.reply_document(img_file)
-            except Exception as e:
-                await message.reply_text(f"⚠️ Failed to send {img_file}: {e}")
-            os.remove(img_file)
-            await asyncio.sleep(5)
+        for file_path in image_files:
+            await fetch_and_send_image(chat_id, file_path, context)
 
-    await message.reply_text("✅ All images sent.")
-
-__all__ = ["gld_img_cmd"]
+    await update.message.reply_text("✅ All available images sent.")
