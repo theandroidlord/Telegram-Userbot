@@ -5,7 +5,7 @@ from pyrogram import Client, filters
 from commands.gld_img import gld_img_cmd
 from commands.gld_vid import gld_vid_cmd
 
-SESSION_STRING = os.getenv("STRING_SESSION")
+SESSION_STRING = os.getenv("PYROGRAM_SESSION_STRING")
 
 if not SESSION_STRING:
     raise ValueError("STRING_SESSION environment variable is missing.")
