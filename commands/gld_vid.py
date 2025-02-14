@@ -1,7 +1,7 @@
 import asyncio
 import shlex
 import os
-from pyrogram import Client
+from pyrogram import Client, filters
 
 DOWNLOAD_DIR = "downloads"
 
@@ -15,18 +15,17 @@ async def gld_vid_cmd(client: Client, message):
 
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-    # Run gallery-dl to download directly
+    # Use gallery-dl to download only video files
     process = await asyncio.create_subprocess_exec(
-        *shlex.split(f'gallery-dl -d {DOWNLOAD_DIR} {url}'),
+        *shlex.split(f'gallery-dl -d {DOWNLOAD_DIR} -f video {url}'),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE
     )
     stdout, stderr = await process.communicate()
 
-    logging_output = stdout.decode() + stderr.decode()
-    print(logging_output)  # Debugging
+    print(stdout.decode(), stderr.decode())  # Debugging logs
 
-    # Check for downloaded videos
+    # Get the list of downloaded videos
     video_files = [f for f in os.listdir(DOWNLOAD_DIR) if f.endswith((".mp4", ".mkv", ".webm"))]
 
     if not video_files:
