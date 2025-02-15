@@ -1,4 +1,4 @@
 pyrogram
-flask
-gallery-dl
+tgcrypto
 aiohttp
+python-dotenv
