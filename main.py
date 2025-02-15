@@ -1,8 +1,9 @@
 import os
 import logging
 import asyncio
+import threading
 from pyrogram import Client
-import keepalive_render  # Import Quart web server
+from flask import Flask
 
 # Load environment variables
 API_ID = int(os.getenv("API_ID", "0"))
@@ -19,9 +20,19 @@ app = Client("userbot", session_string=SESSION_STRING, api_id=API_ID, api_hash=A
 from commands.weather_command import register_weather_command  
 register_weather_command(app)
 
+# Flask server for Render keep-alive
+flask_app = Flask(__name__)
+
+@flask_app.route('/')
+def index():
+    return "Alive"
+
+def run_flask():
+    flask_app.run(host="0.0.0.0", port=10000, threaded=True)
+
 async def start_services():
-    """Start both the Flask server and the Userbot"""
-    asyncio.create_task(keepalive_render.run())  # Run web server without blocking
+    """Start Flask server and Userbot"""
+    threading.Thread(target=run_flask, daemon=True).start()  # Run Flask in a separate thread
     await app.start()
     print("Userbot is running!")
     await asyncio.Event().wait()  # Keep bot running
@@ -29,9 +40,5 @@ async def start_services():
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     
-    # Check if event loop is already running
-    try:
-        asyncio.run(start_services())
-    except RuntimeError:
-        loop = asyncio.get_running_loop()
-        loop.create_task(start_services())
+    # Run main bot process
+    asyncio.run(start_services())
