@@ -20,18 +20,10 @@ from commands.weather_command import register_weather_command
 register_weather_command(app)
 
 async def main():
-    await app.start()
+    asyncio.create_task(keepalive_render.run())  # Start web server in the background
     print("Userbot is running!")
 
-    # Start Quart web server in the background to keep bot alive
-    asyncio.create_task(keepalive_render.keep_alive())
-
-    try:
-        await asyncio.Event().wait()  # Keep running indefinitely
-    except asyncio.CancelledError:
-        print("Userbot stopped.")
-
-    await app.stop()
+    await app.run()  # This makes sure Pyrogram stays active
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
