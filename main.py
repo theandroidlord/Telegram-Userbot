@@ -16,7 +16,10 @@ if not SESSION_STRING:
 app = Client("userbot", session_string=SESSION_STRING, api_id=API_ID, api_hash=API_HASH)
 
 # Import commands
-import commands.hi_command  # Ensure this file exists
+from commands.hi_command import handle_hi_command  
+
+# Ensure command is registered
+app.add_handler(handle_hi_command)
 
 # Web server for Render port binding fix
 async def handle(request):
