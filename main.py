@@ -3,7 +3,7 @@ import logging
 import asyncio
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from pyrogram import Client
+from pyrogram import Client, filters
 from threading import Thread
 
 # Load environment variables
@@ -15,11 +15,7 @@ if not SESSION_STRING:
     raise ValueError("PYROGRAM_SESSION_STRING is missing from environment variables!")
 
 # Initialize Pyrogram client
-app = Client("userbot", session_string=SESSION_STRING, api_id=API_ID, api_hash=API_ID)
-
-# Import & register commands
-from commands.weather_command import register_weather_command  
-register_weather_command(app)
+app = Client("userbot", session_string=SESSION_STRING, api_id=API_ID, api_hash=API_HASH)
 
 # Simple HTTP server for keep-alive
 class SimpleHandler(BaseHTTPRequestHandler):
@@ -30,16 +26,26 @@ class SimpleHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"Alive")
 
 def run_http_server():
-    port = int(os.environ.get("PORT", 10000))  # Use Render's port
+    port = int(os.environ.get("PORT", 10000))  # Render's port
     server = HTTPServer(('0.0.0.0', port), SimpleHandler)
+    print(f"HTTP server running on port {port}")
     server.serve_forever()
 
 # Run HTTP server in a separate thread
 http_thread = Thread(target=run_http_server, daemon=True)
 http_thread.start()
 
+@app.on_message(filters.command("ping"))
+async def ping(client, message):
+    await message.reply("Pong! ✅")
+
+@app.on_message(filters.command("start"))
+async def start(client, message):
+    await message.reply("Userbot is online!")
+
 async def start_services():
     """Start Pyrogram bot."""
+    print("Starting Userbot...")
     await app.start()
     print("Userbot is running!")
     await asyncio.Event().wait()  # Keep bot running
