@@ -19,12 +19,19 @@ app = Client("userbot", session_string=SESSION_STRING, api_id=API_ID, api_hash=A
 from commands.weather_command import register_weather_command  
 register_weather_command(app)
 
-async def main():
-    asyncio.create_task(keepalive_render.run())  # Start web server in the background
+async def start_services():
+    """Start both the Flask server and the Userbot"""
+    asyncio.create_task(keepalive_render.run())  # Run web server without blocking
+    await app.start()
     print("Userbot is running!")
-
-    await app.run()  # This makes sure Pyrogram stays active
+    await asyncio.Event().wait()  # Keep bot running
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    asyncio.run(main())
+    
+    # Check if event loop is already running
+    try:
+        asyncio.run(start_services())
+    except RuntimeError:
+        loop = asyncio.get_running_loop()
+        loop.create_task(start_services())
