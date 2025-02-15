@@ -3,37 +3,39 @@ import logging
 import asyncio
 from pyrogram import Client
 from aiohttp import web
-from dotenv import load_dotenv
-from commands.hi_command import hi_command
 
 # Load environment variables
-load_dotenv()
-API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("API_HASH")
-PYROGRAM_STRING_SESSION = os.getenv("PYROGRAM_STRING_SESSION")
+API_ID = int(os.getenv("API_ID", "0"))
+API_HASH = os.getenv("API_HASH", "")
+SESSION_STRING = os.getenv("PYROGRAM_SESSION_STRING", "")
 
-# Logging setup
-logging.basicConfig(level=logging.INFO)
+if not SESSION_STRING:
+    raise ValueError("PYROGRAM_SESSION_STRING is missing from environment variables!")
 
-# Initialize Pyrogram Client
-app = Client("userbot", session_string=PYROGRAM_STRING_SESSION, api_id=API_ID, api_hash=API_HASH)
+# Initialize Pyrogram client
+app = Client("userbot", session_string=SESSION_STRING, api_id=API_ID, api_hash=API_HASH)
 
-# Import commands
-app.add_handler(hi_command)
+# Import commands from separate files
+from commands.hi_command import handle_hi_command  # Make sure the file exists
 
-# Render port binding fix
+# Start the bot
+async def start_bot():
+    await app.start()
+    print("Userbot is running!")
+
+# Port binding fix for Render
 async def run_server():
     async def handle(request):
         return web.Response(text="Userbot is running!")
 
     app_runner = web.AppRunner(web.Application())
-    app_runner.app.router.add_get("/", handle)
     await app_runner.setup()
-    site = web.TCPSite(app_runner, "0.0.0.0", int(os.getenv("PORT", 10000)))
+    site = web.TCPSite(app_runner, "0.0.0.0", int(os.getenv("PORT", "10000")))
     await site.start()
+    print("Server is running on port", os.getenv("PORT", "10000"))
 
 async def main():
-    await asyncio.gather(app.start(), run_server())
+    await asyncio.gather(start_bot(), run_server())
 
 if __name__ == "__main__":
     asyncio.run(main())
