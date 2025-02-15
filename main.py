@@ -15,7 +15,7 @@ if not SESSION_STRING:
     raise ValueError("PYROGRAM_SESSION_STRING is missing from environment variables!")
 
 # Initialize Pyrogram client
-app = Client("userbot", session_string=SESSION_STRING, api_id=API_ID, api_hash=API_HASH)
+app = Client("userbot", session_string=SESSION_STRING, api_id=API_ID, api_hash=API_ID)
 
 # Import & register commands
 from commands.weather_command import register_weather_command  
@@ -46,6 +46,14 @@ async def start_services():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     
-    # Run bot
-    asyncio.run(start_services())
+    try:
+        loop.run_until_complete(start_services())
+    except KeyboardInterrupt:
+        print("Shutting down bot...")
+    finally:
+        loop.run_until_complete(app.stop())
+        loop.close()
