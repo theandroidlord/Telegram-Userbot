@@ -16,26 +16,30 @@ if not SESSION_STRING:
 app = Client("userbot", session_string=SESSION_STRING, api_id=API_ID, api_hash=API_HASH)
 
 # Import commands
-import commands.hi_command  # Ensure the file exists and is correctly placed
+import commands.hi_command  # Ensure the file exists
 
-# Start the bot
-async def start_bot():
-    await app.start()
-    print("Userbot is running!")
+# Web server for Render port binding fix
+async def handle(request):
+    return web.Response(text="Userbot is running!")
 
-# Port binding fix for Render
 async def run_server():
-    async def handle(request):
-        return web.Response(text="Userbot is running!")
-
     app_runner = web.AppRunner(web.Application())
     await app_runner.setup()
     site = web.TCPSite(app_runner, "0.0.0.0", int(os.getenv("PORT", "10000")))
     await site.start()
-    print("Server is running on port", os.getenv("PORT", "10000"))
+    print("Server running on port", os.getenv("PORT", "10000"))
 
 async def main():
-    await asyncio.gather(start_bot(), run_server())
+    await app.start()
+    print("Userbot is running!")
+
+    # Start web server concurrently
+    await asyncio.gather(run_server())
+
+    await app.idle()  # Keep the bot running
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Userbot stopped.")
