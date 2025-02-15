@@ -1,7 +1,7 @@
 import os
 import logging
 import asyncio
-from pyrogram import Client
+from pyrogram import Client, filters
 from aiohttp import web
 
 # Load environment variables
@@ -15,8 +15,8 @@ if not SESSION_STRING:
 # Initialize Pyrogram client
 app = Client("userbot", session_string=SESSION_STRING, api_id=API_ID, api_hash=API_HASH)
 
-# Import commands from separate files
-from commands.hi_command import handle_hi_command  # Make sure the file exists
+# Import commands
+import commands.hi_command  # Ensure the file exists and is correctly placed
 
 # Start the bot
 async def start_bot():
