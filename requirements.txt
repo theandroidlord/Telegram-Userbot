@@ -3,3 +3,4 @@ tgcrypto
 aiohttp
 flask
 python-dotenv
+waitress
