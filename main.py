@@ -28,7 +28,7 @@ def index():
     return "Alive"
 
 def run_flask():
-    flask_app.run(host="0.0.0.0", port=10000, threaded=True)
+    flask_app.run(host="0.0.0.0", port=8080, threaded=True)
 
 async def start_services():
     """Start Flask server and Userbot"""
