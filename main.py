@@ -16,7 +16,7 @@ if not SESSION_STRING:
 app = Client("userbot", session_string=SESSION_STRING, api_id=API_ID, api_hash=API_HASH)
 
 # Import commands
-import commands.hi_command  # Ensure the file exists
+import commands.hi_command  # Ensure this file exists
 
 # Web server for Render port binding fix
 async def handle(request):
@@ -34,12 +34,22 @@ async def main():
     print("Userbot is running!")
 
     # Start web server concurrently
-    await asyncio.gather(run_server())
+    server_task = asyncio.create_task(run_server())
 
-    await app.idle()  # Keep the bot running
+    try:
+        await app.idle()  # Keep the bot running
+    finally:
+        await app.stop()
+        server_task.cancel()
+        try:
+            await server_task
+        except asyncio.CancelledError:
+            pass
+        print("Userbot stopped.")
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("Userbot stopped.")
+        print("Userbot exited.")
