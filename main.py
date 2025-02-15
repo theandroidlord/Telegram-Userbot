@@ -15,9 +15,13 @@ if not SESSION_STRING:
 # Initialize Pyrogram client
 app = Client("userbot", session_string=SESSION_STRING, api_id=API_ID, api_hash=API_HASH)
 
-# Import and register commands
+# Import & register commands
 from commands.hi_command import register_hi_command  
+from commands.weather_command import register_weather_command  
+
 register_hi_command(app)
+register_weather_command(app)
+
 
 # Web server for Render port binding fix
 async def handle(request):
