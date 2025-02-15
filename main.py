@@ -15,11 +15,9 @@ if not SESSION_STRING:
 # Initialize Pyrogram client
 app = Client("userbot", session_string=SESSION_STRING, api_id=API_ID, api_hash=API_HASH)
 
-# Import commands
-from commands.hi_command import handle_hi_command  
-
-# Ensure command is registered
-app.add_handler(handle_hi_command)
+# Import and register commands
+from commands.hi_command import register_hi_command  
+register_hi_command(app)
 
 # Web server for Render port binding fix
 async def handle(request):
