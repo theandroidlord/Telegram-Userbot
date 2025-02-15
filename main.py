@@ -37,7 +37,7 @@ async def main():
     server_task = asyncio.create_task(run_server())
 
     try:
-        await app.idle()  # Keep the bot running
+        await asyncio.Event().wait()  # Keep running indefinitely
     finally:
         await app.stop()
         server_task.cancel()
@@ -49,7 +49,6 @@ async def main():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("Userbot exited.")
+    
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
