@@ -2,7 +2,7 @@ import os
 import logging
 import asyncio
 import threading
-from pyrogram import Client, filters
+from pyrogram import Client
 import keepalive_render  # Import Flask server from root directory
 
 # Load environment variables
@@ -17,7 +17,11 @@ if not SESSION_STRING:
 app = Client("userbot", session_string=SESSION_STRING, api_id=API_ID, api_hash=API_HASH)
 
 # Start Flask server in a separate thread
-threading.Thread(target=keepalive_render.run, daemon=True).start()
+def start_flask():
+    keepalive_render.run()
+
+flask_thread = threading.Thread(target=start_flask, daemon=True)
+flask_thread.start()
 
 # Import & register commands
 from commands.weather_command import register_weather_command
@@ -26,8 +30,17 @@ register_weather_command(app)
 async def main():
     await app.start()
     print("Userbot is running!")
-    await asyncio.Event().wait()  # Keep running indefinitely
+
+    try:
+        await asyncio.Event().wait()  # Keep running indefinitely
+    except asyncio.CancelledError:
+        print("Userbot stopped.")
+
+    await app.stop()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    asyncio.run(main())
+    
+    # Run Pyrogram asynchronously
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
