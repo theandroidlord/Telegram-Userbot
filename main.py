@@ -18,16 +18,12 @@ app = Client("userbot", session_string=SESSION_STRING, api_id=API_ID, api_hash=A
 # Start Flask server to keep the bot alive
 keepalive_render.keep_alive()
 
-# Import & register commands
-from commands.weather_command import register_weather_command
-register_weather_command(app)
-
 async def main():
     await app.start()
     print("Userbot is running!")
-    
+
     try:
-        await asyncio.Event().wait()  # Keep running indefinitely
+        await asyncio.Event().wait()  # Keeps the bot running forever
     except asyncio.CancelledError:
         print("Userbot stopped.")
 
@@ -35,4 +31,5 @@ async def main():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    asyncio.run(main())
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
