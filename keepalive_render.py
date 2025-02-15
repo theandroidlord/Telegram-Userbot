@@ -1,15 +1,14 @@
-from flask import Flask
-import threading
+from quart import Quart
 
-app = Flask(__name__)
+app = Quart(__name__)
 
 @app.route("/")
-def home():
+async def home():
     return "Userbot is running!"
 
-def run():
-    app.run(host="0.0.0.0", port=10000, threaded=True)
+async def run():
+    await app.run_task(host="0.0.0.0", port=10000)
 
-def keep_alive():
-    thread = threading.Thread(target=run, daemon=True)
-    thread.start()
+async def keep_alive():
+    import asyncio
+    asyncio.create_task(run())
