@@ -2,9 +2,8 @@ import os
 import logging
 import asyncio
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from flask import Flask
 from pyrogram import Client, filters
-from threading import Thread
 
 # Load environment variables
 API_ID = int(os.getenv("API_ID", "0"))
@@ -17,49 +16,42 @@ if not SESSION_STRING:
 # Initialize Pyrogram client
 app = Client("userbot", session_string=SESSION_STRING, api_id=API_ID, api_hash=API_HASH)
 
-# Simple HTTP server for keep-alive
-class SimpleHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/plain")
-        self.end_headers()
-        self.wfile.write(b"Alive")
+# Flask server for keeping Render service alive
+flask_app = Flask(__name__)
 
-def run_http_server():
-    port = int(os.environ.get("PORT", 10000))  # Render's port
-    server = HTTPServer(('0.0.0.0', port), SimpleHandler)
-    print(f"HTTP server running on port {port}")
-    server.serve_forever()
+@flask_app.route("/")
+def home():
+    return "Userbot is running!"
 
-# Run HTTP server in a separate thread
-http_thread = Thread(target=run_http_server, daemon=True)
-http_thread.start()
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    flask_app.run(host="0.0.0.0", port=port, threaded=True)
 
-@app.on_message(filters.command("ping"))
-async def ping(client, message):
-    await message.reply("Pong! ✅")
+# Start Flask in a separate thread
+threading.Thread(target=run_flask, daemon=True).start()
 
-@app.on_message(filters.command("start"))
-async def start(client, message):
-    await message.reply("Userbot is online!")
+# Debug: Log every 2 seconds to confirm Pyrogram is running
+async def debug_log():
+    while True:
+        print("Pyrogram: OK")
+        await asyncio.sleep(2)
 
-async def start_services():
-    """Start Pyrogram bot."""
-    print("Starting Userbot...")
+# Import & register commands
+from commands.weather_command import register_weather_command
+register_weather_command(app)
+
+# Basic message handler for debugging
+@app.on_message(filters.text & filters.private)
+async def debug_messages(client, message):
+    print(f"Received message from {message.chat.id}: {message.text}")
+    await message.reply("I am alive!")
+
+async def main():
     await app.start()
     print("Userbot is running!")
-    await asyncio.Event().wait()  # Keep bot running
+    asyncio.create_task(debug_log())  # Start debug logging
+    await asyncio.Event().wait()  # Keep running indefinitely
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    try:
-        loop.run_until_complete(start_services())
-    except KeyboardInterrupt:
-        print("Shutting down bot...")
-    finally:
-        loop.run_until_complete(app.stop())
-        loop.close()
+    asyncio.run(main())
